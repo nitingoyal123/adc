@@ -1,0 +1,35 @@
+ 
+frame_size = 100;  
+number_of_frames = 5; 
+ 
+data = randi([0, 1], 1, frame_size * number_of_frames);
+ 
+frames = reshape(data, frame_size, number_of_frames); 
+interleaved_frames = frames(:, randperm(number_of_frames)); 
+ 
+modulated_data = 2 * interleaved_frames - 1; % BPSK modulation
+
+figure;
+subplot(2, 1, 1); 
+plot(modulated_data, 'b'); 
+title('Transmitted Data'); 
+xlabel('Time'); 
+ylabel('Amplitude');
+ 
+received_signal = awgn(modulated_data, 10);  
+deinterleaved_frames = reshape(received_signal, frame_size, number_of_frames);
+reconstructed_data = deinterleaved_frames(:, randperm(number_of_frames));
+received_data = reconstructed_data(:);
+ 
+subplot(2, 1, 2); 
+plot(received_data, 'r'); 
+title('Received Data'); 
+xlabel('Time'); 
+ylabel('Amplitude');
+ 
+
+error_rate = biterr(data, received_data); 
+disp(['Bit Error Rate: ', num2str(error_rate)]);
+
+
+

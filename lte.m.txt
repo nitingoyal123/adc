@@ -1,0 +1,92 @@
+enb.NDLRB = 15;
+enb.CellRefP = 1;
+enb.NCellID = 10;
+enb.CyclicPrefix = 'Normal';
+enb.DuplexMode = 'FDD';
+SNRdB = 22;
+SNR = 10^(SNRdB / 20);
+rng('default');
+cfg.Seed = 1;
+cfg.NRxAnts = 1;
+cfg.DelayProfile = 'EVA';
+cfg.DopplerFreq = 120;
+cfg.MIMOCorrelation = 'Low';
+cfg.InitTime = 0;
+cfg.NTerms = 16;
+cfg.ModelType = 'GMEDS';
+cfg.InitPhase = 'Random';
+cfg.NormalizePathGains = 'On';
+cfg.NormalizeTxAnts = 'On';
+cec.PilotAverage = 'UserDefined';
+cec.FreqWindow = 9;
+cec.TimeWindow = 9;
+cec.InterpType = 'Cubic';
+cec.InterpWinSize = 3;
+cec.InterpWindow = 'Centred';
+
+gridsize = lteDLResourceGridSize(enb);
+K = gridsize(1);
+L = gridsize(2);
+P = gridsize(3);
+txGrid = [];
+numberOfBits = K * L * P * 2;
+inputBits = randi([0 1], numberOfBits, 1);
+inputSym = lteSymbolModulate(inputBits, 'QPSK');
+
+for sf = 0:10
+    enb.NSubframe = mod(sf, 10);
+    subframe = lteDLResourceGrid(enb);
+    subframe(:) = inputSym;
+    pssSym = ltePSS(enb);
+    sssSym = lteSSS(enb);
+    pssInd = ltePSSIndices(enb);
+    sssInd = lteSSSIndices(enb);
+    subframe(pssInd) = pssSym;
+    subframe(sssInd) = sssSym;
+    cellRsSym = lteCellRS(enb);
+    cellRsInd = lteCellRSIndices(enb);
+    subframe(cellRsInd) = cellRsSym;
+    txGrid = [txGrid subframe]; %#ok
+end
+
+[txWaveform, info] = lteOFDMModulate(enb, txGrid);
+txGrid = txGrid(:, 1:140);
+cfg.SamplingRate = info.SamplingRate;
+rxWaveform = lteFadingChannel(cfg, txWaveform);
+N0 = 1 / (sqrt(2.0 * enb.CellRefP * double(info.Nfft)) * SNR);
+noise = N0 * complex(randn(size(rxWaveform)), randn(size(rxWaveform)));
+rxWaveform = rxWaveform + noise;
+offset = lteDLFrameOffset(enb, rxWaveform);
+rxWaveform = rxWaveform(1 + offset:end, :);
+rxGrid = lteOFDMDemodulate(enb, rxWaveform);
+enb.NSubframe = 0;
+[estChannel, noiseEst] = lteDLChannelEstimate(enb, cec, rxGrid);
+eqGrid = lteEqualizeMMSE(rxGrid, estChannel, noiseEst);
+eqError = txGrid - eqGrid;
+rxError = txGrid - rxGrid;
+EVM = comm.EVM;
+EVM.AveragingDimensions = [1 2];
+preEqualisedEVM = EVM(txGrid, rxGrid);
+fprintf('Percentage RMS EVM of Pre-Equalized signal: %0.3f%%\n', preEqualisedEVM);
+postEqualisedEVM = EVM(txGrid, eqGrid);
+fprintf('Percentage RMS EVM of Post-Equalized signal: %0.3f%%\n', postEqualisedEVM);
+hDownlinkEstimationEqualizationResults(rxGrid, eqGrid);
+
+function hDownlinkEstimationEqualizationResults(rxGrid, eqGrid)
+    figure;
+    dims = size(rxGrid);
+    surf(20 * log10(abs(rxGrid)));
+    title('Received resource grid');
+    ylabel('Subcarrier');
+    xlabel('Symbol');
+    zlabel('absolute value (dB)');
+    axis([1 dims(2) 1 dims(1) -40 10]);
+
+    figure;
+    surf(20 * log10(abs(eqGrid)));
+    title('Equalized resource grid');
+    ylabel('Subcarrier');
+    xlabel('Symbol');
+    zlabel('absolute value (dB)');
+    axis([1 dims(2) 1 dims(1) -40 10]);
+end

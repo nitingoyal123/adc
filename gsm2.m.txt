@@ -1,0 +1,28 @@
+% gsm uplink implementation
+
+uplink=gsmUplinkConfig;
+wfInfo = gsmInfo(uplink);
+waveform = gsmFrame(uplink);
+samplingRate=wfInfo.SampleRate;
+
+time = (0:length(waveform)-1)/samplingRate*1e3; % inclusive range function
+ 
+figure;
+subplot(2,1,1);
+
+plot(time, abs(waveform));
+axis([0 5 0 1.2])
+title('GSM Uplink waveform - Amplitude plot');
+xlabel('Time (ms)');
+ylabel('Amplitude');
+
+
+subplot(2,1,2);
+
+plot(time, unwrap(angle(waveform)));
+grid on;
+title('GSM Uplink - Phase plot');
+xlabel('Time (ms)');
+ylabel('Phase (rad)');
+
+
